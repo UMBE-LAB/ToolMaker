@@ -9,7 +9,7 @@ from toolmaker.utils.paths import LOCAL_TOOLMAKER_DIR
 ENV_VAR_SUBSTITUTION_PATTERN = re.compile(
     r"(?P<full>\$\{env:(?P<var>[A-Za-z_][A-Za-z0-9_]*)\})"
 )
-ALLOWED_ENV_VARS: Container[str] = {"HF_TOKEN"}
+ALLOWED_ENV_VARS: Container[str] = {"HF_TOKEN", "GITHUB_TOKEN"}
 
 
 def substitute_env_vars(

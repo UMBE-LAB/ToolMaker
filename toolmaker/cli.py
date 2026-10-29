@@ -25,7 +25,8 @@ from toolmaker.utils.io import chown_dir_using_docker, friendly_name, rmdir
 from toolmaker.utils.logging import logger, tlog
 from toolmaker.utils.paths import BENCHMARK_DIR, TOOLS_DIR
 
-app = typer.Typer()
+# Don't print locals in tracebacks: they include secrets such as the container env (GITHUB_TOKEN)
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 @app.command()
@@ -91,22 +92,24 @@ def install(
         build=build,
         env={k: substitute_env_vars(v) for k, v in definition.repo.env.items()},
     )
-    with tlog.log_to(install_folder / "logs.jsonl"):
-        installed_state = install_repository(
-            llm,
-            runtime,
-            definition,
-            max_steps=max_steps,
-            include_paper_summary=include_paper_summary,
-        )
-        tlog("installed_repository_bash", installed_state.bash())
-        with install_folder.joinpath("install.sh").open("w") as f:
-            f.write(installed_state.bash())
-        with install_folder.joinpath("installed_repository.yaml").open("w") as f:
-            yaml.dump(installed_state.response.model_dump(mode="json"), f)
-        runtime.save_checkpoint(tag=f"installed-{friendly_name(run_name)}")
-
-    runtime.stop()
+    try:
+        with tlog.log_to(install_folder / "logs.jsonl"):
+            installed_state = install_repository(
+                llm,
+                runtime,
+                definition,
+                max_steps=max_steps,
+                include_paper_summary=include_paper_summary,
+            )
+            tlog("installed_repository_bash", installed_state.bash())
+            with install_folder.joinpath("install.sh").open("w") as f:
+                f.write(installed_state.bash())
+            with install_folder.joinpath("installed_repository.yaml").open("w") as f:
+                yaml.dump(installed_state.response.model_dump(mode="json"), f)
+            runtime.save_checkpoint(tag=f"installed-{friendly_name(run_name)}")
+    finally:
+        # Also on Ctrl-C / errors, so the container doesn't keep holding the runtime port
+        runtime.stop()
 
 
 @app.command("create")

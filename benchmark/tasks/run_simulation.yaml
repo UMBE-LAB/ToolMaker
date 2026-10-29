@@ -1,0 +1,150 @@
+name: run_simulation
+repo:
+  name: cityFFD_exec
+  url: "https://github.com/thientran1010/cityFFD_exec"
+  branch: main
+  env:
+    # Private repo: git inside the container authenticates via this credential helper,
+    # so a plain `git clone https://github.com/...` works without the token appearing in any prompt.
+    GITHUB_TOKEN: ${env:GITHUB_TOKEN}
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: credential.https://github.com.helper
+    GIT_CONFIG_VALUE_0: '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
+papers: []
+category: urban_climate
+description: >-
+  Run one CityFFD simulation on the GPU.
+  The repository README describes the Windows build `CityFFD.exe`; this repository ships the Linux CUDA build `CityFFD-V1`, which is the executable to run here.
+  It takes no command-line arguments: it reads its inputs from, and writes its outputs to, its current working directory, so it must be launched with `cityffd_dir` as the working directory.
+  Staging: copy the input files into `cityffd_dir` under the exact (case-sensitive) names the binary opens:
+  `geometry.stl` (always, whatever the original name of the geometry file), `domain.txt`, `weatherdata.txt`, `Untitled.cfd`, `T thermal.txt` (building surface temperatures; note the space) and `Track_points.txt`.
+  Run: record which files are already in `cityffd_dir` (with their size and modification time), launch the binary, and wait until the process exits or the time limit is reached; on timeout, stop the process.
+  Results: report the files the run created or changed.
+  Do not edit, check or interpret the inputs. Only one run at a time can use a given `cityffd_dir`.
+  IMPORTANT: never launch the binary with the repository's own `domain.txt` (`repeat 20000`), as that takes hours; any trial run must use the supplied input files.
+arguments:
+  cityffd_dir:
+    description: Folder containing the CityFFD executable. All inputs are copied here.
+    type: str
+  geometry_file:
+    description: STL geometry. Copied as `geometry.stl` whatever its original name.
+    type: str
+  domain_file:
+    description: Simulation settings, copied as `domain.txt`.
+    type: str
+  weather_file:
+    description: Weather data (u, w, T_a, T_G), copied as `weatherdata.txt`.
+    type: str
+  mesh_file:
+    description: Mesh from CFD0 Editor, copied as `Untitled.cfd`. May be null to skip copying when the mesh file is already in `cityffd_dir`.
+    type: str
+  surface_temp_file:
+    description: Building surface temperatures, one per solid, copied as `T thermal.txt`.
+    type: str
+  track_points_file:
+    description: Track-point settings, copied as `Track_points.txt`.
+    type: str
+  timeout_minutes:
+    description: Maximum time to wait for the run before stopping it. If null, wait without a time limit.
+    type: float
+returns:
+  status:
+    description: >-
+      One of "completed", "timed_out" or "failed". "completed" means the process exited and produced output.
+      "timed_out" means the time limit was hit and the process was stopped. "failed" means the process exited without producing any output files.
+    type: str
+  exit_code:
+    description: The process exit code as reported, or null if the process was stopped on timeout.
+    type: int
+  elapsed_seconds:
+    description: How long the run took, in seconds.
+    type: float
+  result_file:
+    description: Absolute path of `results.vtk` if the run wrote one, otherwise null.
+    type: str
+  iteration_files:
+    description: >-
+      The `<iteration>.vtk` files written every output_step iterations, as a list of dicts {"iteration": int, "path": str},
+      sorted by iteration number.
+    type: list
+  other_new_files:
+    description: Absolute paths of any other files the run created or changed (e.g. the track-point results), sorted.
+    type: list
+  console_log:
+    description: The last part (last 200 lines) of the solver's console output (stdout and stderr), for diagnosing failures.
+    type: str
+example:
+  arguments:
+    cityffd_dir: /workspace/cityFFD_exec
+    geometry_file: /mount/input/city_geometry.stl
+    domain_file: /mount/input/domain_smoke.txt
+    weather_file: /mount/input/weather.txt
+    mesh_file: /mount/input/mesh.cfd
+    surface_temp_file: /mount/input/surface_temps.txt
+    track_points_file: /mount/input/track_points.txt
+    timeout_minutes: 30
+  mount:
+    "cityffd/case/geometry.stl": city_geometry.stl
+    "cityffd/case/domain_smoke.txt": domain_smoke.txt
+    "cityffd/case/weatherdata.txt": weather.txt
+    "cityffd/case/Untitled.cfd": mesh.cfd
+    "cityffd/case/T thermal.txt": surface_temps.txt
+    "cityffd/case/Track_points.txt": track_points.txt
+test_cases:
+  smoke_domain2:
+    arguments:
+      cityffd_dir: /workspace/cityFFD_exec
+      geometry_file: /mount/input/city_geometry.stl
+      domain_file: /mount/input/domain2_smoke.txt
+      weather_file: /mount/input/weather.txt
+      mesh_file: /mount/input/mesh.cfd
+      surface_temp_file: /mount/input/surface_temps.txt
+      track_points_file: /mount/input/track_points.txt
+      timeout_minutes: 30
+    mount:
+      "cityffd/case/geometry.stl": city_geometry.stl
+      "cityffd/case/domain2_smoke.txt": domain2_smoke.txt
+      "cityffd/case/weatherdata.txt": weather.txt
+      "cityffd/case/Untitled.cfd": mesh.cfd
+      "cityffd/case/T thermal.txt": surface_temps.txt
+      "cityffd/case/Track_points.txt": track_points.txt
+  existing_mesh:
+    arguments:
+      cityffd_dir: /workspace/cityFFD_exec
+      geometry_file: /mount/input/city_geometry.stl
+      domain_file: /mount/input/domain_smoke.txt
+      weather_file: /mount/input/weather.txt
+      mesh_file: null
+      surface_temp_file: /mount/input/surface_temps.txt
+      track_points_file: /mount/input/track_points.txt
+      timeout_minutes: 30
+    mount:
+      "cityffd/case/geometry.stl": city_geometry.stl
+      "cityffd/case/domain_smoke.txt": domain_smoke.txt
+      "cityffd/case/weatherdata.txt": weather.txt
+      "cityffd/case/T thermal.txt": surface_temps.txt
+      "cityffd/case/Track_points.txt": track_points.txt
+  timeout:
+    arguments:
+      cityffd_dir: /workspace/cityFFD_exec
+      geometry_file: /mount/input/city_geometry.stl
+      domain_file: /mount/input/domain.txt
+      weather_file: /mount/input/weather.txt
+      mesh_file: /mount/input/mesh.cfd
+      surface_temp_file: /mount/input/surface_temps.txt
+      track_points_file: /mount/input/track_points.txt
+      timeout_minutes: 1
+    mount:
+      "cityffd/case/geometry.stl": city_geometry.stl
+      "cityffd/case/domain.txt": domain.txt
+      "cityffd/case/weatherdata.txt": weather.txt
+      "cityffd/case/Untitled.cfd": mesh.cfd
+      "cityffd/case/T thermal.txt": surface_temps.txt
+      "cityffd/case/Track_points.txt": track_points.txt
+note: >-
+  Case inputs in benchmark/data/cityffd/case are copied from thientran1010/cityFFD_exec (main) and are gitignored, since the repo is private.
+  domain_smoke.txt / domain2_smoke.txt are domain.txt / domain2.txt with `repeat 4` and `output_step 2` (instead of 20000 / 20) for smoke runs.
+  The user guide names the mesh `untitled.cfd` and the surface temperatures `Output_CityBEM_Ts.txt`, but the Linux binary opens
+  `Untitled.cfd` and `T thermal.txt` (from `strings CityFFD-V1`), so those are the staged names. The binary has no `results.vtk` string,
+  so result_file is probably always null. `existing_mesh` relies on the repo already containing Untitled.cfd; `timeout` uses the full
+  20000-iteration domain.txt with a 1-minute limit and should return status "timed_out".
